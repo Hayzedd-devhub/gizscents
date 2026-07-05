@@ -371,6 +371,25 @@ export async function POST(req: NextRequest) {
       { session },
     );
 
+    // Best-effort admin email alert — gated by the notificationPreferences
+    // setting, sent only after the transaction commits below so we never
+    // notify admins about an order that ends up rolled back.
+    const notifyAdminsOfNewOrder = async () => {
+      const methods = settings.notificationPreferences?.orderNew?.methods ?? [
+        "email",
+      ];
+      if (!methods.includes("email")) return;
+      try {
+        const orderUser = await order.getOrderUser().catch(() => null);
+        await EmailService.sendNewOrderAdminAlert(order, {
+          name: orderUser?.name || shippingAddress.fullName,
+          email: orderUser?.email,
+        });
+      } catch (error) {
+        console.error("Failed to send new-order admin email:", error);
+      }
+    };
+
     // Handle different checkout methods
     if (method === "online") {
       // Initialize provider payment for online payments
@@ -413,6 +432,7 @@ export async function POST(req: NextRequest) {
 
       if (checkoutSuccess) {
         await session.commitTransaction();
+        await notifyAdminsOfNewOrder();
         return NextResponse.json({
           success: true,
           message: "Payment initialized successfully",
@@ -427,6 +447,7 @@ export async function POST(req: NextRequest) {
       payment.status = "pending";
       await payment.save({ session });
       await session.commitTransaction();
+      await notifyAdminsOfNewOrder();
 
       if (method === "pay_on_delivery") {
         try {

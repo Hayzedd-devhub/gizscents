@@ -31,6 +31,15 @@ export const ORDER_STATUSES = [
 /** Payment providers */
 export const PAYMENT_PROVIDERS = ["monnify", "paystack", "opay"] as const;
 
+/**
+ * Notification delivery methods admins can enable per event (e.g. new order).
+ * `available: false` methods are shown in settings as "coming soon" until wired up.
+ */
+export const NOTIFICATION_METHODS = [
+  { value: "email", label: "Email", available: true },
+  { value: "whatsapp", label: "WhatsApp", available: false },
+] as const;
+
 /** Review limits */
 export const MAX_REVIEW_RATING = 5;
 export const MIN_REVIEW_RATING = 1;

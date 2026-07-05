@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -9,7 +9,6 @@ import {
   User,
   Menu,
   X,
-  Search,
   LogOut,
   LayoutDashboard,
   Sun,
@@ -24,6 +23,7 @@ import { fetchAdminNotificationCount } from "@/lib/store/slices/notificationSlic
 import apiClient from "@/lib/api/client";
 import { toast } from "react-hot-toast";
 import { useTheme } from "next-themes";
+import SearchBar from "./SearchBar";
 
 export default function Navbar() {
   const router = useRouter();
@@ -38,7 +38,6 @@ export default function Navbar() {
   const { storeName } = useStoreSettings();
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
 
   const cartCount = items.reduce((sum, item) => sum + item.quantity, 0);
   const wishlistCount = wishlistItems.length;
@@ -71,20 +70,6 @@ export default function Navbar() {
     }
   };
 
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (searchQuery.trim()) {
-      router.push(`/products?search=${encodeURIComponent(searchQuery.trim())}`);
-      setIsMobileMenuOpen(false);
-    }
-  };
-
-  useEffect(() => {
-    if (searchQuery.trim().length === 0) {
-      router.push(`/products`);
-    }
-  }, [searchQuery]);
-
   return (
     <header className="sticky top-0 z-40 w-full glass border-b border-border transition-colors duration-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -98,19 +83,7 @@ export default function Navbar() {
 
           {/* Search Bar - Desktop */}
           {showSearch && (
-            <form
-              onSubmit={handleSearchSubmit}
-              className="hidden md:flex items-center relative flex-1 max-w-md"
-            >
-              <input
-                type="text"
-                placeholder="Search products, categories..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-surface-secondary text-foreground text-sm pl-10 pr-4 py-2 rounded-full border border-border focus:border-primary-500 focus:outline-none transition-colors"
-              />
-              <Search className="absolute left-3.5 h-4 w-4 text-muted-foreground" />
-            </form>
+            <SearchBar className="hidden md:block flex-1 max-w-md" />
           )}
 
           {/* Navigation Actions */}
@@ -236,16 +209,10 @@ export default function Navbar() {
         {/* Mobile Search - Visible only on / and /products */}
         {showSearch && (
           <div className="md:hidden pb-3">
-            <form onSubmit={handleSearchSubmit} className="relative w-full">
-              <input
-                type="text"
-                placeholder="Search products..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-surface-secondary text-foreground text-sm pl-10 pr-4 py-2 rounded-full border border-border focus:border-primary-500 focus:outline-none transition-colors"
-              />
-              <Search className="absolute top-3 left-3.5 h-4 w-4 text-muted-foreground" />
-            </form>
+            <SearchBar
+              className="w-full"
+              onNavigate={() => setIsMobileMenuOpen(false)}
+            />
           </div>
         )}
       </div>

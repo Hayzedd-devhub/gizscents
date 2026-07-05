@@ -3,6 +3,8 @@ import nodemailer from "nodemailer";
 import { formatCurrency } from "../utils/formatters";
 import getStoreSettings from "../settings.server";
 import { IOrderDocument } from "../db/models/Order";
+import User from "../db/models/User";
+import { API_BASE_URL } from "../utils/constants";
 
 // Set up transporter
 const transporter = nodemailer.createTransport({
@@ -15,8 +17,8 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-const fromAddress =
-  process.env.EMAIL_FROM || '"E-Commerce Store" <no-reply@example.com>';
+const APP_NAME = "Zeddhub";
+const fromAddress = `"${APP_NAME}" <${process.env.SMTP_USER || "no-reply@example.com"}>`;
 
 export class EmailService {
   /**
@@ -35,11 +37,9 @@ export class EmailService {
       return true;
     }
 
-    const { storeName } = await getStoreSettings();
-
     try {
       await transporter.sendMail({
-        from: storeName || fromAddress,
+        from: fromAddress,
         to,
         subject,
         html,
@@ -268,5 +268,55 @@ export class EmailService {
     `;
 
     return this.sendMail(email, `Order Status Update - ${orderNumber}`, html);
+  }
+
+  /**
+   * Notify all admin/staff users by email that a new order has been placed.
+   * Recipient list is resolved fresh each call (role: admin/staff), so newly
+   * added staff automatically start receiving alerts with no extra wiring.
+   */
+  static async sendNewOrderAdminAlert(
+    order: IOrderDocument,
+    customer: { name?: string; email?: string } = {},
+  ): Promise<boolean> {
+    const admins = await User.find({ role: { $in: ["admin", "staff"] } })
+      .select("email")
+      .lean();
+    const recipients = admins.map((a) => a.email).filter(Boolean);
+    if (!recipients.length) return false;
+
+    const settings = await getStoreSettings();
+    const summaryHtml = this.generateOrderSummaryHtml(
+      order,
+      settings?.currencySymbol,
+    );
+    const orderLink = `${API_BASE_URL}/admin/orders/${order._id}`;
+
+    const html = `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
+        <div style="text-align: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 20px; margin-bottom: 20px;">
+          <h2 style="color: #f59e0b; margin: 0;">New Order Received</h2>
+          <p style="color: #64748b; margin: 5px 0 0 0;">Order <strong>${order.orderNumber}</strong> needs your attention.</p>
+        </div>
+
+        <div style="margin-bottom: 20px; background-color: #f8fafc; padding: 15px; border-radius: 6px; font-size: 0.875rem;">
+          <strong>Customer:</strong> ${customer.name || order.shippingAddress.fullName}<br>
+          ${customer.email ? `<strong>Email:</strong> ${customer.email}<br>` : ""}
+          <strong>Phone:</strong> ${order.shippingAddress.phone}
+        </div>
+
+        ${summaryHtml}
+
+        <div style="text-align: center; margin-top: 30px;">
+          <a href="${orderLink}" style="background-color: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">View Order in Admin Dashboard</a>
+        </div>
+      </div>
+    `;
+
+    return this.sendMail(
+      recipients.join(", "),
+      `New Order Received - ${order.orderNumber}`,
+      html,
+    );
   }
 }

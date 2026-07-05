@@ -48,6 +48,7 @@ export async function PUT(req: NextRequest) {
       "checkoutMethod",
       "personalAccount",
       "paymentSettings",
+      "notificationPreferences",
       "heroContent",
       "heroSlides",
       "aboutUs",

@@ -186,9 +186,22 @@ ProductSchema.index({ isSponsored: 1, status: 1 });
 ProductSchema.index({ avgRating: -1 });
 ProductSchema.index({ salesCount: -1 });
 ProductSchema.index({ createdAt: -1 });
+// MongoDB allows only one text index per collection. If this collection was
+// created before this field set changed, drop the old one first:
+//   db.products.dropIndex("name_text_description_text_tags_text")
+// otherwise Mongoose's autoIndex will fail silently to build "ProductTextIndex".
 ProductSchema.index(
-  { name: "text", description: "text", tags: "text" },
-  { weights: { name: 10, tags: 5, description: 1 } },
+  {
+    name: "text",
+    sku: "text",
+    tags: "text",
+    shortDescription: "text",
+    description: "text",
+  },
+  {
+    name: "ProductTextIndex",
+    weights: { name: 10, sku: 8, tags: 5, shortDescription: 3, description: 1 },
+  },
 );
 
 const Product =

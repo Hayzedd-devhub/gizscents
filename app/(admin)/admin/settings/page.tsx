@@ -23,11 +23,13 @@ import {
   Share2,
   Layout,
   Info,
+  Bell,
 } from "lucide-react";
 import { useStoreSettings } from "@/components/providers/SettingsProvider";
 import { Toggle } from "@/components/ui/Toggle";
 import { MenuItem, Select } from "@mui/material";
 import { CURRENCIES } from "@/currencies";
+import { NOTIFICATION_METHODS } from "@/lib/utils/constants";
 
 /* ─── Zod Schema ──────────────────────────────────────────────────────────── */
 
@@ -127,6 +129,12 @@ const settingsSchema = z.object({
     }),
   }),
 
+  notificationPreferences: z.object({
+    orderNew: z.object({
+      methods: z.array(z.enum(["email", "whatsapp"])),
+    }),
+  }),
+
   heroContent: z.object({
     title: z.string().max(100).optional().or(z.literal("")),
     subtitle: z.string().max(300).optional().or(z.literal("")),
@@ -219,6 +227,9 @@ const DEFAULT_VALUES: SettingsForm = {
       merchantId: "",
       baseUrl: "https://sandboxapi.opaycheckout.com",
     },
+  },
+  notificationPreferences: {
+    orderNew: { methods: ["email"] },
   },
   heroContent: {
     title: "",
@@ -358,6 +369,14 @@ export default function AdminSettingsPage() {
             opay: {
               ...DEFAULT_VALUES.paymentSettings.opay,
               ...data.paymentSettings?.opay,
+            },
+          },
+          notificationPreferences: {
+            ...DEFAULT_VALUES.notificationPreferences,
+            ...data.notificationPreferences,
+            orderNew: {
+              ...DEFAULT_VALUES.notificationPreferences.orderNew,
+              ...data.notificationPreferences?.orderNew,
             },
           },
         });
@@ -730,6 +749,58 @@ export default function AdminSettingsPage() {
             <option value="whatsapp">WhatsApp Order</option>
           </select>
         </div>
+      </Card>
+
+      {/* ── Order Notifications ── */}
+      <Card className="p-6" glass>
+        <SectionHeader
+          icon={<Bell size={18} />}
+          title="Order Notifications"
+          subtitle="Choose how admins and staff are alerted when a new order comes in"
+        />
+        <Controller
+          control={control}
+          name="notificationPreferences.orderNew.methods"
+          render={({ field }) => (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {NOTIFICATION_METHODS.map((method) => {
+                const checked = field.value?.includes(method.value);
+                return (
+                  <div
+                    key={method.value}
+                    className={`flex items-center justify-between gap-2 ${
+                      !method.available ? "opacity-60" : ""
+                    }`}
+                  >
+                    <Toggle
+                      checked={!!checked}
+                      onChange={(v) => {
+                        if (!method.available) return;
+                        const next = v
+                          ? [...(field.value || []), method.value]
+                          : (field.value || []).filter(
+                              (m: string) => m !== method.value,
+                            );
+                        field.onChange(next);
+                      }}
+                      label={method.label}
+                    />
+                    {!method.available && (
+                      <span className="text-[10px] bg-warning-500/15 text-warning-600 px-2 py-0.5 rounded-full uppercase font-bold tracking-wider">
+                        Coming Soon
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        />
+        <p className="text-xs text-muted-foreground mt-4">
+          New order alerts are sent to every admin and staff account. More
+          events (order status changes, low stock, etc.) will be
+          configurable here soon.
+        </p>
       </Card>
 
       {/* ── 8. Personal / Bank Account ── */}

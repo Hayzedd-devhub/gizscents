@@ -87,6 +87,13 @@ export const StoreSettingsSchema = z.object({
         .optional(),
     })
     .optional(),
+  notificationPreferences: z
+    .object({
+      orderNew: z.object({
+        methods: z.array(z.enum(["email", "whatsapp"])).default(["email"]),
+      }),
+    })
+    .optional(),
 });
 
 export type StoreSettingsInput = z.infer<typeof StoreSettingsSchema>;

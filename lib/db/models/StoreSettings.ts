@@ -79,6 +79,12 @@ export interface IStoreSettingsDocument extends Document {
       baseUrl: string;
     };
   };
+  notificationPreferences: {
+    orderNew: {
+      // Subset of NOTIFICATION_METHODS values, e.g. ["email"] or ["email", "whatsapp"]
+      methods: string[];
+    };
+  };
   heroContent?: {
     title?: string;
     subtitle?: string;
@@ -230,6 +236,15 @@ const StoreSettingsSchema = new Schema<IStoreSettingsDocument>(
         baseUrl: {
           type: String,
           default: "https://sandboxapi.opaycheckout.com",
+        },
+      },
+    },
+    notificationPreferences: {
+      orderNew: {
+        methods: {
+          type: [String],
+          enum: ["email", "whatsapp"],
+          default: ["email"],
         },
       },
     },

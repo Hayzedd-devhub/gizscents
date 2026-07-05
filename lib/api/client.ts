@@ -9,7 +9,7 @@ import { getGuestId } from "@/lib/utils/guest";
 const DEFAULT_CACHE_TTL = 1000 * 60 * 2; // 2 minutes
 const cacheStore = new Map<string, { timestamp: number; response: AxiosResponse }>();
 
-interface CachedRequestConfig extends AxiosRequestConfig {
+export interface CachedRequestConfig extends AxiosRequestConfig {
   cache?: boolean;
   cacheTTL?: number;
 }

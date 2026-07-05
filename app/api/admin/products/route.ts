@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminGuard } from "@/lib/auth/requireAdmin";
 import dbConnect from "@/lib/db/connect";
 import Product from "@/lib/db/models/Product";
+import Category from "@/lib/db/models/Category";
 import { DEFAULT_PAGE_SIZE } from "@/lib/utils/constants";
-import { slugify } from "@/lib/utils/helpers";
+import { slugify, escapeRegex } from "@/lib/utils/helpers";
 
 export async function GET(req: NextRequest) {
   try {
@@ -18,13 +19,66 @@ export async function GET(req: NextRequest) {
     );
     const search = url.searchParams.get("search") || "";
     const category = url.searchParams.get("category");
-    const filter: any = {};
-    if (search) filter.$text = { $search: search };
-    if (category) filter.category = category;
-    const total = await Product.countDocuments(filter);
+    const baseFilter: any = {};
+    if (category) baseFilter.category = category;
+
+    const sortStage: Record<string, any> = search
+      ? { score: { $meta: "textScore" } }
+      : { createdAt: -1 };
+
+    // Build the search/match stages once, shared by both the count and the
+    // paginated item fetch below.
+    const matchPipeline: Record<string, any>[] = [];
+    if (search) {
+      // `category` is a reference, not a text field, so $text alone never
+      // matches a query like "laptop" against a "Laptops" category — union in
+      // products from categories whose name matches too (skip when already
+      // filtered to one category, since name-matching wouldn't apply there).
+      let categoryIds: any[] = [];
+      if (!baseFilter.category) {
+        const matchingCategories = await Category.find({
+          name: { $regex: escapeRegex(search), $options: "i" },
+        })
+          .select("_id")
+          .lean();
+        categoryIds = matchingCategories.map((c) => c._id);
+      }
+
+      matchPipeline.push(
+        { $match: { ...baseFilter, $text: { $search: search } } },
+        { $addFields: { score: { $meta: "textScore" } } },
+      );
+
+      if (categoryIds.length) {
+        matchPipeline.push({
+          $unionWith: {
+            coll: "products",
+            pipeline: [
+              { $match: { ...baseFilter, category: { $in: categoryIds } } },
+              { $addFields: { score: 0 } },
+            ],
+          },
+        });
+      }
+
+      matchPipeline.push(
+        { $sort: { score: -1 } },
+        { $group: { _id: "$_id", doc: { $first: "$$ROOT" } } },
+        { $replaceRoot: { newRoot: "$doc" } },
+      );
+    } else {
+      matchPipeline.push({ $match: baseFilter });
+    }
+
+    const countResult = await Product.aggregate([
+      ...matchPipeline,
+      { $count: "total" },
+    ] as any);
+    const total = countResult[0]?.total || 0;
+
     const items = await Product.aggregate([
-      { $match: filter },
-      { $sort: { createdAt: -1 } },
+      ...matchPipeline,
+      { $sort: sortStage },
       { $skip: (page - 1) * limit },
       { $limit: limit },
       {
@@ -94,7 +148,7 @@ export async function GET(req: NextRequest) {
       //     updatedAt: { $first: "$updatedAt" },
       //   },
       // },
-    ]);
+    ] as any);
     // .lean();
     return NextResponse.json({
       success: true,

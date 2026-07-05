@@ -114,6 +114,13 @@ export function getInitials(name: string): string {
 }
 
 /**
+ * Escape regex special characters so user input can be safely used inside `new RegExp()`.
+ */
+export function escapeRegex(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
  * Check if a value is a valid MongoDB ObjectId string.
  */
 export function isValidObjectId(id: string): boolean {

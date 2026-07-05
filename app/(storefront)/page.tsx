@@ -1,5 +1,6 @@
 import React from "react";
 import Link from "next/link";
+import type { Metadata } from "next";
 import {
   ArrowRight,
   ShieldCheck,
@@ -19,6 +20,41 @@ import { CategoryGrid } from "@/components/storefront/CategoryGrid";
 import { ICategory, IProduct } from "@/lib/types";
 import getStoreSettings from "@/lib/settings.server";
 import { HeroSlider } from "@/components/storefront/HeroSlider";
+import { truncate } from "@/lib/utils/helpers";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const settings = await getStoreSettings();
+  const storeName = settings?.storeName || "Store";
+  const title = settings?.heroContent?.title || `${storeName} — Shop the Best Deals`;
+  const description = truncate(
+    settings?.heroContent?.subtitle ||
+      settings?.description ||
+      "Shop curated collections with fast delivery and secure payments.",
+    160,
+  );
+  const ogImage =
+    settings?.heroSlides?.[0]?.image?.url ||
+    settings?.seoMeta?.ogImage ||
+    settings?.logo?.url;
+
+  return {
+    title,
+    description,
+    alternates: { canonical: "/" },
+    openGraph: {
+      title,
+      description,
+      url: "/",
+      images: ogImage ? [{ url: ogImage }] : undefined,
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: ogImage ? [ogImage] : undefined,
+    },
+  };
+}
 
 async function getHomeData() {
   try {

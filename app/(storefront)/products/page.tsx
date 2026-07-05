@@ -1,9 +1,12 @@
 import React from "react";
+import type { Metadata } from "next";
 import dbConnect from "@/lib/db/connect";
 import Product from "@/lib/db/models/Product";
 import Category from "@/lib/db/models/Category";
 import ProductCard from "@/components/storefront/ProductCard";
 import Link from "next/link";
+import { escapeRegex } from "@/lib/utils/helpers";
+import getStoreSettings from "@/lib/settings.server";
 
 // Mock Fallback Products
 const MOCK_PRODUCTS = [
@@ -75,6 +78,41 @@ interface ListingPageProps {
   }>;
 }
 
+export async function generateMetadata({
+  searchParams,
+}: ListingPageProps): Promise<Metadata> {
+  const params = await searchParams;
+  const settings = await getStoreSettings();
+  const storeName = settings?.storeName || "Store";
+
+  let title = "Shop All Products";
+  if (params.search) {
+    title = `Search results for "${params.search}"`;
+  } else if (params.category) {
+    try {
+      await dbConnect();
+      const category = await Category.findOne({ slug: params.category })
+        .select("name")
+        .lean();
+      if (category) title = category.name;
+    } catch {
+      // fall back to default title
+    }
+  }
+
+  const description = `Browse ${title.toLowerCase()} at ${storeName}. Quality products, fast delivery, secure checkout.`;
+
+  return {
+    title,
+    description,
+    alternates: { canonical: "/products" },
+    // Parameterized search-result pages are thin/duplicate content — keep them out of the index.
+    robots: params.search ? { index: false, follow: true } : undefined,
+    openGraph: { title, description, url: "/products" },
+    twitter: { card: "summary", title, description },
+  };
+}
+
 async function getProductsData(
   search?: string,
   categorySlug?: string,
@@ -84,34 +122,76 @@ async function getProductsData(
     await dbConnect();
 
     // Build DB Query
-    const query: Record<string, any> = { status: "active" };
-
-    if (search) {
-      query.$or = [
-        { name: { $regex: search, $options: "i" } },
-        { description: { $regex: search, $options: "i" } },
-      ];
-    }
+    const baseQuery: Record<string, any> = { status: "active" };
 
     if (categorySlug) {
       const category = await Category.findOne({ slug: categorySlug });
       if (category) {
-        query.category = category._id;
+        baseQuery.category = category._id;
       }
     }
 
-    // Build Sorting
-    let sortOptions: Record<string, any> = { createdAt: -1 };
+    // Build Sorting — default to relevance when searching, unless an explicit sort was chosen
+    let sortOptions: Record<string, any> = search
+      ? { score: { $meta: "textScore" } }
+      : { createdAt: -1 };
     if (sort === "price_asc") {
       sortOptions = { price: 1 };
     } else if (sort === "price_desc") {
       sortOptions = { price: -1 };
     } else if (sort === "rating") {
       sortOptions = { avgRating: -1 };
+    } else if (sort === "latest") {
+      sortOptions = { createdAt: -1 };
     }
 
-    const products = await Product.aggregate([
-      { $match: query },
+    const pipeline: Record<string, any>[] = [];
+
+    if (search) {
+      // `category` is a reference, not a text field, so the $text index never
+      // matches a query like "laptop" against a "Laptops" category. Resolve
+      // categories whose name matches the term and union their products in
+      // alongside the direct text matches (skip this when already scoped to
+      // one category — matching category names wouldn't be meaningful there).
+      let categoryIds: any[] = [];
+      if (!baseQuery.category) {
+        const matchingCategories = await Category.find({
+          name: { $regex: escapeRegex(search), $options: "i" },
+        })
+          .select("_id")
+          .lean();
+        categoryIds = matchingCategories.map((c) => c._id);
+      }
+
+      pipeline.push(
+        { $match: { ...baseQuery, $text: { $search: search } } },
+        { $addFields: { score: { $meta: "textScore" } } },
+      );
+
+      if (categoryIds.length) {
+        pipeline.push({
+          $unionWith: {
+            coll: "products",
+            pipeline: [
+              { $match: { ...baseQuery, category: { $in: categoryIds } } },
+              { $addFields: { score: 0 } },
+            ],
+          },
+        });
+      }
+
+      // Sort by score before de-duping so a product matched by both branches
+      // keeps its real text-relevance score instead of the category branch's 0.
+      pipeline.push(
+        { $sort: { score: -1 } },
+        { $group: { _id: "$_id", doc: { $first: "$$ROOT" } } },
+        { $replaceRoot: { newRoot: "$doc" } },
+      );
+    } else {
+      pipeline.push({ $match: baseQuery });
+    }
+
+    pipeline.push(
       { $sort: sortOptions },
       {
         $lookup: {
@@ -121,7 +201,9 @@ async function getProductsData(
           as: "variants",
         },
       },
-    ]);
+    );
+
+    const products = await Product.aggregate(pipeline as any);
 
     const categories = await Category.find({ isActive: true })
       .sort({ order: 1 })

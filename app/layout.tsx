@@ -9,6 +9,8 @@ import "./globals.css";
 // Script import removed; theme initialization handled in ThemeProvider
 import { Providers } from "@/components/providers";
 import { getCurrentHost } from "@/lib/store/utils";
+import { API_BASE_URL } from "@/lib/utils/constants";
+import { truncate } from "@/lib/utils/helpers";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -16,24 +18,50 @@ const inter = Inter({
   display: "swap",
 });
 
-export const metadata: Metadata = {
-  title: {
-    default: "Store — Shop the Best Deals",
-    template: "%s | Store",
-  },
-  description:
-    "Discover quality products at great prices. Shop our curated collection with fast delivery and secure payments.",
-  keywords: ["ecommerce", "shop", "online store", "buy", "deals"],
-  openGraph: {
-    type: "website",
-    locale: "en_NG",
-    siteName: "Store",
-  },
-  robots: {
-    index: true,
-    follow: true,
-  },
-};
+const DEFAULT_DESCRIPTION =
+  "Discover quality products at great prices. Shop our curated collection with fast delivery and secure payments.";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const settings = await getStoreSettings();
+  const storeName = settings?.storeName || "Store";
+  const title = settings?.seoMeta?.metaTitle || `${storeName} — Shop the Best Deals`;
+  const description = truncate(
+    settings?.seoMeta?.metaDescription || settings?.description || DEFAULT_DESCRIPTION,
+    160,
+  );
+  const ogImage = settings?.seoMeta?.ogImage || settings?.logo?.url;
+
+  return {
+    metadataBase: new URL(API_BASE_URL),
+    title: {
+      default: title,
+      template: `%s | ${storeName}`,
+    },
+    description,
+    keywords: ["ecommerce", "shop", "online store", "buy", "deals", storeName],
+    icons: settings?.favicon ? { icon: settings.favicon } : undefined,
+    alternates: { canonical: "/" },
+    openGraph: {
+      type: "website",
+      locale: "en_NG",
+      siteName: storeName,
+      title,
+      description,
+      url: "/",
+      images: ogImage ? [{ url: ogImage }] : undefined,
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: ogImage ? [ogImage] : undefined,
+    },
+    robots: {
+      index: true,
+      follow: true,
+    },
+  };
+}
 
 export default async function RootLayout({
   children,

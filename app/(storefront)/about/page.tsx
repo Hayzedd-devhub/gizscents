@@ -1,6 +1,25 @@
 import React from "react";
+import type { Metadata } from "next";
 import getStoreSettings from "@/lib/settings.server";
 import { notFound } from "next/navigation";
+import { truncate } from "@/lib/utils/helpers";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const settings = await getStoreSettings();
+  const title = settings?.aboutUs?.title || "About Us";
+  const description = truncate(
+    settings?.aboutUs?.content ||
+      `Learn more about ${settings?.storeName || "our store"}.`,
+    160,
+  );
+
+  return {
+    title,
+    description,
+    alternates: { canonical: "/about" },
+    openGraph: { title, description, url: "/about" },
+  };
+}
 
 export default async function AboutPage() {
   const settings = await getStoreSettings();
